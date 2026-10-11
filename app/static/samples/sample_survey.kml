@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Bengaluru Survey Site</name>
+    <Placemark>
+      <name>Pit Boundary A</name>
+      <description>Primary excavation footprint</description>
+      <ExtendedData>
+        <Data name="site_code"><value>PIT-A</value></Data>
+        <Data name="surveyed_on"><value>2026-03-14</value></Data>
+      </ExtendedData>
+      <Polygon>
+        <outerBoundaryIs><LinearRing><coordinates>
+          77.5000,12.9700,0 77.5092,12.9700,0 77.5092,12.9790,0 77.5000,12.9790,0 77.5000,12.9700,0
+        </coordinates></LinearRing></outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+    <Placemark>
+      <name>Pit Boundary B (with void)</name>
+      <Polygon>
+        <outerBoundaryIs><LinearRing><coordinates>
+          77.5200,12.9700,0 77.5300,12.9700,0 77.5300,12.9800,0 77.5200,12.9800,0 77.5200,12.9700,0
+        </coordinates></LinearRing></outerBoundaryIs>
+        <innerBoundaryIs><LinearRing><coordinates>
+          77.5230,12.9730,0 77.5270,12.9730,0 77.5270,12.9770,0 77.5230,12.9770,0 77.5230,12.9730,0
+        </coordinates></LinearRing></innerBoundaryIs>
+      </Polygon>
+    </Placemark>
+    <Placemark>
+      <name>Haul Road</name>
+      <LineString><coordinates>
+        77.5000,12.9600,0 77.5100,12.9620,0 77.5200,12.9610,0 77.5320,12.9655,0
+      </coordinates></LineString>
+    </Placemark>
+    <Placemark>
+      <name>Control Point CP-1</name>
+      <Point><coordinates>77.5150,12.9750,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Conveyor + Stockpile</name>
+      <MultiGeometry>
+        <LineString><coordinates>77.5400,12.9700,0 77.5450,12.9720,0</coordinates></LineString>
+        <Polygon><outerBoundaryIs><LinearRing><coordinates>
+          77.5460,12.9700,0 77.5490,12.9700,0 77.5490,12.9730,0 77.5460,12.9700,0
+        </coordinates></LinearRing></outerBoundaryIs></Polygon>
+      </MultiGeometry>
+    </Placemark>
+    <Placemark>
+      <name>Broken Placemark</name>
+      <LineString><coordinates>77.5500,12.9800,0</coordinates></LineString>
+    </Placemark>
+  </Document>
+</kml>

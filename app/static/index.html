@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geospatial File Measurement API</title>
+<meta name="description" content="Upload a Shapefile or KML and get per-feature area and length, measured in a projected CRS chosen per feature.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root{
+  --ink:#10233a; --ink-soft:#3d5570; --ink-faint:#7b8ca1;
+  --sheet:#eef1ef; --sheet-raised:#f7f9f7; --rule:#c6cfc9;
+  --grid:rgba(16,35,58,.055);
+  --measure:#9a5b12;      /* annotation ochre: measured values only */
+  --survey:#0e6f6e;       /* projection / CRS signal */
+  --alert:#a3301f;
+  --radius:2px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background-color:var(--sheet);
+  background-image:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:28px 28px;
+  color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 64px}
+
+/* ---- masthead: reads like the title block of a survey drawing ---- */
+header{border-bottom:2px solid var(--ink);margin-bottom:28px;padding:36px 0 16px}
+h1{font-size:clamp(1.5rem,3.4vw,2.1rem);font-weight:700;letter-spacing:-.02em;margin:0 0 6px;line-height:1.15}
+.sub{color:var(--ink-soft);max-width:66ch;margin:0 0 18px}
+.sheet-meta{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--rule);background:var(--sheet-raised)}
+.sheet-meta div{padding:7px 14px;border-right:1px solid var(--rule);font-size:.78rem;color:var(--ink-soft)}
+.sheet-meta div:last-child{border-right:0}
+.sheet-meta b{font-family:"IBM Plex Mono",monospace;color:var(--ink);font-weight:500}
+
+/* ---- intake ---- */
+.intake{display:grid;grid-template-columns:1.35fr 1fr;gap:18px;margin-bottom:26px}
+@media(max-width:780px){.intake{grid-template-columns:1fr}}
+.drop{
+  border:2px dashed var(--rule);background:var(--sheet-raised);
+  padding:30px 22px;text-align:center;cursor:pointer;
+  transition:border-color .15s ease,background .15s ease;
+}
+.drop:hover,.drop:focus-visible{border-color:var(--survey);background:#fff}
+.drop.live{border-color:var(--survey);background:#fff;border-style:solid}
+.drop strong{display:block;font-size:1.02rem;margin-bottom:4px}
+.drop span{color:var(--ink-faint);font-size:.85rem}
+.panel{border:1px solid var(--rule);background:var(--sheet-raised);padding:16px 18px}
+.panel h2{font-size:.82rem;font-weight:600;margin:0 0 4px;color:var(--ink)}
+.panel p{margin:0 0 12px;font-size:.82rem;color:var(--ink-faint)}
+.samples{display:flex;flex-direction:column;gap:7px}
+button.sample{
+  font:inherit;font-size:.84rem;text-align:left;cursor:pointer;
+  background:#fff;border:1px solid var(--rule);padding:8px 11px;color:var(--ink);
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  transition:border-color .12s ease,color .12s ease;
+}
+button.sample:hover{border-color:var(--survey);color:var(--survey)}
+button.sample code{font-family:"IBM Plex Mono",monospace;font-size:.74rem;color:var(--ink-faint)}
+button.sample:hover code{color:var(--survey)}
+button:focus-visible,a:focus-visible,.drop:focus-visible{outline:2px solid var(--survey);outline-offset:2px}
+
+/* ---- status ---- */
+#status{margin:0 0 20px;padding:11px 15px;font-size:.88rem;border-left:3px solid var(--survey);background:var(--sheet-raised);display:none}
+#status.show{display:block}
+#status.bad{border-left-color:var(--alert);color:var(--alert)}
+
+/* ---- results ---- */
+#results{display:none}
+#results.show{display:block;animation:rise .35s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){#results.show{animation:none}}
+
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));border:1px solid var(--rule);background:var(--sheet-raised);margin-bottom:18px}
+.readout div{padding:12px 15px;border-right:1px solid var(--rule)}
+.readout div:last-child{border-right:0}
+.readout dt{font-size:.72rem;color:var(--ink-faint);margin:0 0 3px}
+.readout dd{margin:0;font-family:"IBM Plex Mono",monospace;font-size:1.1rem;font-weight:500;color:var(--ink)}
+.readout dd.m{color:var(--measure)}
+.readout dd.s{color:var(--survey);font-size:.95rem}
+
+.split{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:18px;align-items:start}
+@media(max-width:900px){.split{grid-template-columns:1fr}}
+#map{height:360px;border:1px solid var(--rule);background:#dfe4e0}
+
+.schedule{border:1px solid var(--rule);background:var(--sheet-raised);overflow-x:auto}
+.schedule h2{font-size:.82rem;margin:0;padding:10px 14px;border-bottom:1px solid var(--rule);font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:.83rem}
+th{text-align:left;font-weight:600;font-size:.72rem;color:var(--ink-faint);padding:7px 11px;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:8px 11px;border-bottom:1px solid var(--rule);vertical-align:top}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:#fff}
+td.num{font-family:"IBM Plex Mono",monospace;text-align:right;white-space:nowrap;color:var(--measure);font-weight:500}
+td.idx{font-family:"IBM Plex Mono",monospace;color:var(--ink-faint)}
+td.epsg{font-family:"IBM Plex Mono",monospace;font-size:.76rem;color:var(--survey);white-space:nowrap}
+.tag{display:inline-block;font-size:.68rem;padding:1px 6px;border:1px solid currentColor;white-space:nowrap}
+.t-ok{color:var(--survey)} .t-na{color:var(--ink-faint)} .t-bad{color:var(--alert)}
+.note{font-size:.76rem;color:var(--ink-faint);margin-top:3px;max-width:44ch}
+.note.warn{color:var(--alert)}
+
+.flags{border:1px solid var(--alert);border-left-width:3px;background:#fdf6f4;padding:11px 15px;margin-bottom:18px;font-size:.83rem}
+.flags p{margin:0 0 5px;font-weight:600}
+.flags li{margin-bottom:3px;color:var(--ink-soft)}
+
+footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--rule);font-size:.82rem;color:var(--ink-faint);display:flex;flex-wrap:wrap;gap:18px}
+footer a{color:var(--survey);text-decoration:none;border-bottom:1px solid transparent}
+footer a:hover{border-bottom-color:var(--survey)}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Geospatial File Measurement API</h1>
+  <p class="sub">Upload a zipped Shapefile or a KML file. Every polygon is measured for area, every line for length, each one reprojected into the metre-based coordinate system that fits where it sits on the globe.</p>
+  <div class="sheet-meta">
+    <div>Accepts <b>.zip</b> (Shapefile) · <b>.kml</b></div>
+    <div>Projection <b>per-feature UTM / UPS</b></div>
+    <div>API docs <b><a href="/docs" style="color:var(--survey);text-decoration:none">/docs</a></b></div>
+  </div>
+</header>
+
+<div class="intake">
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a geospatial file to upload">
+    <strong>Drop a file here, or click to choose</strong>
+    <span>A .kml file, or a .zip holding .shp / .shx / .dbf / .prj</span>
+    <input type="file" id="file" accept=".kml,.zip" class="hidden">
+  </div>
+  <div class="panel">
+    <h2>No file to hand?</h2>
+    <p>Run one of these survey samples.</p>
+    <div class="samples">
+      <button class="sample" data-f="sample_survey.kml">Mine site survey<code>KML</code></button>
+      <button class="sample" data-f="sample_parcels_shapefile.zip">Land parcels<code>SHP</code></button>
+      <button class="sample" data-f="sample_no_prj.zip">Parcels, no .prj<code>SHP</code></button>
+    </div>
+  </div>
+</div>
+
+<div id="status" role="status" aria-live="polite"></div>
+
+<div id="results">
+  <div id="flags" class="flags hidden"></div>
+  <dl class="readout" id="readout"></dl>
+  <div class="split">
+    <div id="map" aria-label="Map of uploaded features"></div>
+    <div class="schedule">
+      <h2>Measurement schedule</h2>
+      <table>
+        <thead><tr><th>#</th><th>Geometry</th><th>Result</th><th style="text-align:right">Area</th><th style="text-align:right">Length</th><th>Projection</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>Built with FastAPI, Shapely and pyproj</span>
+  <a href="/docs">Interactive API docs</a>
+  <a href="/redoc">ReDoc</a>
+  <a href="https://github.com/sadhithyan7/geospatial-measurement-api">Source</a>
+</footer>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const drop = $('#drop'), fileInput = $('#file'), status = $('#status');
+let map, layer;
+
+const fmt = (n, d = 2) => n == null ? '—' :
+  n.toLocaleString('en-IN', {minimumFractionDigits: d, maximumFractionDigits: d});
+
+function say(msg, bad = false) {
+  status.textContent = msg;
+  status.className = 'show' + (bad ? ' bad' : '');
+}
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+});
+fileInput.addEventListener('change', e => e.target.files[0] && send(e.target.files[0]));
+
+['dragenter','dragover'].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('live'); }));
+['dragleave','drop'].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('live'); }));
+drop.addEventListener('drop', e => {
+  const f = e.dataTransfer.files[0];
+  if (f) send(f);
+});
+
+document.querySelectorAll('button.sample').forEach(btn =>
+  btn.addEventListener('click', async () => {
+    const name = btn.dataset.f;
+    say('Fetching ' + name + '…');
+    try {
+      const res = await fetch('/static/samples/' + name);
+      if (!res.ok) throw new Error('Sample not found');
+      send(new File([await res.blob()], name));
+    } catch (err) { say('Could not load the sample: ' + err.message, true); }
+  }));
+
+async function send(file) {
+  say('Processing ' + file.name + '…');
+  const body = new FormData();
+  body.append('file', file);
+  try {
+    const res = await fetch('/api/files/', { method: 'POST', body });
+    const data = await res.json();
+    if (!res.ok) { say(data.detail || 'Upload failed.', true); return; }
+    const measurements = await (await fetch(`/api/files/${data.id}/measurements/`)).json();
+    const geojson = await (await fetch(`/api/files/${data.id}/geojson/`)).json();
+    render(data, measurements, geojson);
+    say(`${data.filename} — ${data.feature_count} features read in ${data.processing_ms} ms.`);
+  } catch (err) { say('Request failed: ' + err.message, true); }
+}
+
+function render(file, measurements, geojson) {
+  $('#readout').innerHTML = `
+    <div><dt>Source CRS</dt><dd class="s">${file.crs}</dd></div>
+    <div><dt>Features</dt><dd>${file.feature_count}</dd></div>
+    <div><dt>Measured</dt><dd>${file.measured_count}</dd></div>
+    <div><dt>Failed</dt><dd ${file.failed_count ? 'style="color:var(--alert)"' : ''}>${file.failed_count}</dd></div>
+    <div><dt>Total area</dt><dd class="m">${fmt(file.totals.area_hectares, 3)} ha</dd></div>
+    <div><dt>Total length</dt><dd class="m">${fmt(file.totals.length_metres, 1)} m</dd></div>`;
+
+  const flags = $('#flags');
+  if (file.warnings?.length) {
+    flags.innerHTML = `<p>${file.warnings.length} assumption${file.warnings.length > 1 ? 's' : ''} made while reading this file</p>
+      <ul>${file.warnings.map(w => `<li>${w}</li>`).join('')}</ul>`;
+    flags.classList.remove('hidden');
+  } else flags.classList.add('hidden');
+
+  const cls = { MEASURED: 't-ok', NOT_APPLICABLE: 't-na', UNSUPPORTED: 't-na', FAILED: 't-bad' };
+  $('#rows').innerHTML = measurements.measurements.map(f => {
+    const label = f.properties.name || f.properties.parcel_id || f.properties.Name || '';
+    const note = f.error
+      ? `<div class="note warn">${f.error}</div>`
+      : (f.warnings?.length ? `<div class="note warn">${f.warnings[0]}</div>` : '');
+    return `<tr>
+      <td class="idx">${f.feature_index}</td>
+      <td>${f.geometry_type}${label ? `<div class="note">${label}</div>` : ''}${note}</td>
+      <td><span class="tag ${cls[f.measurement_status] || 't-na'}">${f.measurement_status.replace('_', ' ')}</span></td>
+      <td class="num">${f.area ? fmt(f.area.square_metres) + ' m²' : '—'}</td>
+      <td class="num">${f.length ? fmt(f.length.metres) + ' m' : '—'}</td>
+      <td class="epsg" title="${f.projection_reason || ''}">${f.projected_crs || '—'}</td>
+    </tr>`;
+  }).join('');
+
+  $('#results').classList.add('show');
+  drawMap(geojson);
+}
+
+function drawMap(geojson) {
+  if (!map) {
+    map = L.map('map', { scrollWheelZoom: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+  }
+  if (layer) map.removeLayer(layer);
+  if (!geojson.features?.length) { map.setView([20.59, 78.96], 4); return; }
+
+  layer = L.geoJSON(geojson, {
+    style: { color: '#0e6f6e', weight: 2, fillColor: '#0e6f6e', fillOpacity: .14 },
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+      radius: 5, color: '#9a5b12', fillColor: '#9a5b12', fillOpacity: .8, weight: 1
+    }),
+    onEachFeature: (f, lyr) => {
+      const p = f.properties || {};
+      const name = p.name || p.parcel_id || `Feature ${f.id}`;
+      const m = p._area_sq_m ? `${fmt(p._area_sq_m)} m²`
+              : p._length_m ? `${fmt(p._length_m)} m` : 'no measurement';
+      lyr.bindPopup(`<strong>${name}</strong><br>${m}<br><small>${p._projected_crs || ''}</small>`);
+    }
+  }).addTo(map);
+  map.fitBounds(layer.getBounds(), { padding: [24, 24] });
+}
+</script>
+</body>
+</html>
