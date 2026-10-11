@@ -5,7 +5,7 @@ every feature in it, and returns **area** for polygons and **length** for
 linestrings — each one measured in a projected coordinate system chosen for
 where that feature actually sits on the globe.
 
-**Live demo:** _(add your Vercel URL here)_ · **Interactive API docs:** `/docs`
+**Live demo:** _https://geospatial-measurement-api-kappa.vercel.app/_ · **Interactive API docs:** `/docs`
 
 Built with FastAPI, Shapely, pyproj and SQLAlchemy.
 
